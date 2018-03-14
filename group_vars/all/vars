@@ -1,0 +1,7 @@
+ansible_ssh_private_key_file: "{{ vault_ansible_ssh_private_key_file }}"
+ad_subdomain: "{{ vault_ad_subdomain }}"
+ad_domain: "{{ vault_ad_domain }}"
+ad_tld: "{{ vault_ad_tld }}"
+ad_usergroup: "{{ vault_ad_usergroup }}"
+ad_bind_password: "{{ vault_ad_bind_password }}"
+ad_admin_user: "{{ vault_ad_admin_user }}"

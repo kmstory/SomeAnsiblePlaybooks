@@ -1,0 +1,4 @@
+Replace this with your vault containing the values for your vars. If you don't yet know how to use vaults, here are some links to help you get started:
+https://docs.ansible.com/ansible/2.4/vault.html
+https://www.digitalocean.com/community/tutorials/how-to-use-vault-to-protect-sensitive-ansible-data-on-ubuntu-16-04
+https://www.expressvpn.com/blog/ansible-variables-vaults/#best

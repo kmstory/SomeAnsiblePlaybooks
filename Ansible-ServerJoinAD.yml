@@ -1,0 +1,179 @@
+---
+- hosts: "{{ which_hosts }}"
+
+#sets the domain variables
+#I want to move them back into an external file, but that'll have to happen later
+  vars:
+    sudoers_dest: /etc/sudoers.d/domain
+    sssd_dest: /etc/sssd/sssd.conf
+    unattended_file: "/etc/apt/apt.conf.d/50unattended-upgrades"
+    unattended_after: "Unattended-Upgrade::Allowed-Origins {"
+    unattended_remove: '        "${distro_id}:${distro_codename}";'
+    unattended_insert: '        "${distro_id}:${distro_codename}-security";'
+    auto_upgrades_file: "/etc/apt/apt.conf.d/20auto-upgrades"
+
+  # vars_prompt:
+  #   - name: ad_bind_password
+  #     prompt: "what is the password for the domain Administrator account?"
+  #     secret: yes
+
+  tasks:
+
+    - name: Add IU repos
+      apt_repository: repo="{{ item }}" state=present
+      with_items:
+        - "deb http://ftp.ussg.iu.edu/linux/ubuntu/ xenial main multiverse universe"
+        - "deb-src http://ftp.ussg.iu.edu/linux/ubuntu/ xenial main multiverse universe"
+        - "deb http://ftp.ussg.iu.edu/linux/ubuntu/ xenial-security main multiverse universe"
+        - "deb-src http://ftp.ussg.iu.edu/linux/ubuntu/ xenial-security main multiverse universe"
+        - "deb http://ftp.ussg.iu.edu/linux/ubuntu/ xenial-updates main multiverse universe"
+        - "deb-src http://ftp.ussg.iu.edu/linux/ubuntu/ xenial-updates main multiverse universe"
+      when: ansible_architecture == "x86_64" and
+        ansible_distribution == "Ubuntu" and
+        ansible_distribution_release == "xenial"
+
+#removes these repos when run on a 64-bit Ubuntu 16.04 host
+    - name: Remove stock repos
+      apt_repository: repo="{{ item }}" state=absent
+      with_items:
+        - "deb http://archive.ubuntu.com/ubuntu xenial main restricted universe multiverse"
+        - "deb http://archive.ubuntu.com/ubuntu xenial-updates main restricted universe multiverse"
+        - "deb http://archive.ubuntu.com/ubuntu xenial-security main restricted universe multiverse"
+      when: ansible_architecture == "x86_64" and
+        ansible_distribution == "Ubuntu" and
+        ansible_distribution_release == "xenial"
+
+#updates the apt cache if the current cache is older than 1 week
+    - name: Apt cache update
+      apt: cache_valid_time=604800
+      when: ansible_architecture == "x86_64" and ansible_distribution == "Ubuntu" and ansible_distribution_release == "xenial"
+
+#makes ubuntu download and install all security updates automatically, but does not automatically reboot
+    - name: Install automatic upgrades package
+      apt: name=unattended-upgrades state=present
+      when: ansible_architecture == "x86_64" and ansible_distribution == "Ubuntu" and ansible_distribution_release == "xenial"
+
+    - name: Check & modify 20auto-upgrades settings
+      lineinfile:
+        dest: "{{ auto_upgrades_file }}"
+        line: "{{ item }}"
+        state: present
+        insertafter: EOF
+      with_items:
+        - 'APT::Periodic::AutocleanInterval "7";'
+        - 'APT::Periodic::Unattended-Upgrade "1";'
+      when: ansible_architecture == "x86_64" and ansible_distribution == "Ubuntu" and ansible_distribution_release == "xenial"
+
+    - name: Check & add to 50unattended-upgrades settings
+      lineinfile:
+        dest: "{{ unattended_file }}"
+        line: "{{ unattended_insert }}"
+        state: present
+        insertafter: "{{ unattended_after }}"
+      when: ansible_architecture == "x86_64" and ansible_distribution == "Ubuntu" and ansible_distribution_release == "xenial"
+
+    - name: Check & remove from 50unattended-upgrades settings
+      lineinfile:
+        dest: "{{ unattended_file }}"
+        line: "{{ unattended_remove }}"
+        state: absent
+      when: ansible_architecture == "x86_64" and ansible_distribution == "Ubuntu" and ansible_distribution_release == "xenial"
+
+#installs these packages using apt when run on a 64-bit Ubuntu 16.04 host
+    - name: Install required AD packages on Ubuntu
+      apt: name="{{ item }}" state=present
+      with_items:
+        - sssd-tools
+        - samba-common-bin
+        - packagekit
+        - policykit-1
+        - realmd
+        - adcli
+        - oddjob
+        - oddjob-mkhomedir
+        - python-pip
+      when: ansible_architecture == "x86_64" and ansible_distribution == "Ubuntu" and ansible_distribution_release == "xenial"
+
+#upgrades installed packages using yum when run on a CentOS or RHEL host
+    - name: Install latest security updates on CentOS/RHEL
+      yum: name='*' state=latest security=yes
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+#installs these packages using yum when run on a CentOS or RHEL host
+    - name: Install required AD packages on CentOS/RHEL
+      yum: name="{{ item }}" state=present
+      with_items:
+        - PackageKit
+        - sssd
+        - sssd-ad
+        - sssd-client
+        - sssd-common
+        - sssd-common-pac
+        - sssd-dbus
+        - sssd-ipa
+        - sssd-krb5
+        - sssd-krb5-common
+        - sssd-ldap
+        - sssd-polkit-rules
+        - sssd-proxy
+        - sssd-tools
+        - sudo
+        - realmd
+        - samba-client-libs
+        - samba-common
+        - samba-common-libs
+        - samba-common-tools
+        - samba-libs
+        - polkit.x86_64
+        - adcli
+        - oddjob
+        - oddjob-mkhomedir.x86_64
+        - python2-pip
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+    - name: Install the proper version of pexpect
+      pip:
+        name: pexpect
+        version: 3.3
+
+#checks to see if host is already domain bound, binds it if it isn't
+#this section is (lightly) adapted from https://dodgydudes.se/ansible-playbook-join-centos-server-to-active-directory/
+    - name: Check if machine is bound
+      shell: /bin/bash -c "realm list | grep 'kerberos-member'"
+      register: realmd_bound
+      changed_when: false
+      ignore_errors: true
+
+    - name: Join system to AD
+      expect:
+        command: '/bin/bash -c "realm join {{ ad_subdomain }}{{ ad_domain }}{{ ad_tld }} --user={{ ad_admin_user }}"'
+        responses:
+          Password for *: "{{  ad_bind_password  }}"
+      when: realmd_bound|failed
+
+    - name: Restrict access based on specific AD group
+      lineinfile:
+        dest: "{{ sssd_dest }}"
+        line: 'ldap_access_filter = memberOf=cn="{{ ad_usergroup }}",cn=users,dc="{{ ad_subdomain }}",dc="{{ ad_domain }}",dc="{{ ad_tld }}"'
+        insertafter: EOF
+        state: present
+      notify:
+        - restart sssd
+
+    - name: Ensure domain sudoers file exists
+      copy:
+        content: ""
+        dest: "{{ sudoers_dest }}"
+        force: no
+
+    - name: Add AD group to sudoers
+      lineinfile:
+        dest: "{{ sudoers_dest }}"
+        line: '%{{ ad_usergroup }}@{{ ad_subdomain }}{{ ad_domain }}{{ ad_tld }} ALL=(ALL) ALL'
+        insertafter: EOF
+        state: present
+
+#restarts sssd so new settings will be available
+  handlers:
+    - name: restart sssd
+      service: name=sssd state=restarted

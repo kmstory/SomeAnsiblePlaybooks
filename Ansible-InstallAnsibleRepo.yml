@@ -1,0 +1,30 @@
+---
+- hosts: all
+  tasks:
+#this is necessary to resolve dependencies for ansible from the ansible ppa
+    - name: Install software-properties-common on Debian
+      apt:
+        name: software-properties-common
+        state: latest
+        update_cache: yes
+      when: ansible_architecture == "x86_64" and ansible_os_family == "Debian"
+
+    - name: Add official Ansible repo on Debian
+      apt_repository:
+        repo: 'ppa:ansible/ansible'
+        update_cache: yes
+      when: ansible_architecture == "x86_64" and ansible_os_family == "Debian"
+
+#by using "state: latest" we ensure that ansible is always on the most recent stable version
+    - name: Install/Update Ansible on Debian
+      apt: name=ansible state=latest
+      when: ansible_architecture == "x86_64" and ansible_os_family == "Debian"
+
+# ansible is in this repository, so we have to make sure it's enabled before we try to install ansible
+    - name: Install EPEL release repo on Centos/RHEL
+      yum: name=epel-release state=present
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+    - name: Install/Update Ansible on Centos/RHEL
+      yum: name=epel-release state=present
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'

@@ -1,0 +1,22 @@
+---
+- hosts: hypervisors
+
+  - name: Get variables from *_vars directories and subdirectories
+    include_vars:
+      dir: "{{ item }}"
+      with_items:
+        - group_vars
+        - host_vars
+
+  tasks:
+    - name: Install pip
+      apt: name=pip state=latest
+
+    - name: Update pip
+      pip: name=pip state=latest
+
+    - name: Install Proxmoxer and Requests
+      pip: name="{{ item }}" state=latest
+      with_items:
+        - proxmoxer
+        - requests

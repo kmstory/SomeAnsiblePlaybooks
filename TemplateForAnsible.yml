@@ -1,0 +1,12 @@
+---
+- hosts: all
+
+  - name: Get variables from *_vars directories and subdirectories
+    include_vars:
+      dir: "{{ item }}"
+      with_items:
+        - group_vars
+        - host_vars
+
+  tasks:
+    - name:

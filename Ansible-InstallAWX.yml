@@ -1,6 +1,6 @@
 ---
 
-- hosts: awx.internal.fbgncenter.org
+- hosts: awx_host
   become: yes
   vars:
     nodejs_version: "6.x"
